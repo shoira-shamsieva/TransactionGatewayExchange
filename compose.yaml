@@ -1,0 +1,39 @@
+services:
+  mysql_db:
+    image: 'mysql:latest'
+    container_name: mysql_db
+    restart: always
+    ports:
+      - '3306:3306'
+    expose:
+      - '3306'
+    networks:
+      - my-network
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - 'MYSQL_DATABASE=TXN_GATEWAY'
+      - 'MYSQL_USER: temp'
+      - 'MYSQL_PASSWORD: temp_password'
+      - 'MYSQL_ROOT_PASSWORD=root_password'
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - mysql_db
+    ports:
+      - "8080:8080"
+    expose:
+      - '8080'
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql_db:3306/TXN_GATEWAY?autoReconnect=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: temp
+      SPRING_DATASOURCE_PASSWORD: temp_password
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MySQLDialect
+    networks:
+      - my-network
+
+networks:
+  my-network:
