@@ -7,8 +7,6 @@ services:
       - '3306:3306'
     expose:
       - '3306'
-    networks:
-      - my-network
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
@@ -19,8 +17,8 @@ services:
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 15s
-      timeout: 10s
-      retries: 3
+      timeout: 15s
+      retries: 5
 
   app:
     build:
@@ -31,15 +29,15 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+      - "8443:8443"
     expose:
       - '8080'
+      - '8443'
+      - '80'
+      - '443'
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql_db:3306/TXN_GATEWAY?autoReconnect=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: temp
       SPRING_DATASOURCE_PASSWORD: temp_password
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MySQLDialect
-    networks:
-      - my-network
 
-networks:
-  my-network:

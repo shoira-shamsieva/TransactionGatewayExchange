@@ -1,5 +1,6 @@
 package com.ag.transactiongatewayexchange.service;
 
+import com.ag.transactiongatewayexchange.dto.PurchaseWithExchangeRateDTO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.cache.CacheBuilder;
@@ -7,6 +8,7 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
@@ -14,13 +16,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.math.RoundingMode;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Service
 public class CurrencyConverterService {
-
-    private final LoadingCache<String, Map<LocalDate, BigDecimal>> conversionCache;
 
     @Value("${currency-conversion.api.url}")
     private String currencyConversionApiUrl;
@@ -29,90 +31,65 @@ public class CurrencyConverterService {
     private int expireAfterWrite;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestTemplate restTemplate = new RestTemplate();
-    private static final int SIX_MONTHS_IN_DAYS = 6 * 30;
+    private final LoadingCache<String, Map<LocalDate, BigDecimal>> currencyExchangeRatesCache = CacheBuilder.newBuilder()
+            .expireAfterWrite(expireAfterWrite, TimeUnit.DAYS) // Cache expires after 24 hours
+            .build(new CacheLoader<String, Map<LocalDate, BigDecimal>>() {
+                @Override
+                public Map<LocalDate, BigDecimal> load(String key) throws Exception {
+                    return fetchAndStoreExchangeRates(key);
+                }
+            });
 
-    public CurrencyConverterService() {
-        this.conversionCache = CacheBuilder.newBuilder()
-                .expireAfterWrite(SIX_MONTHS_IN_DAYS, TimeUnit.DAYS)
-                .build(new CacheLoader<String, Map<LocalDate, BigDecimal>>() {
-                    @Override
-                    public Map<LocalDate, BigDecimal> load(String currency) throws Exception {
-                        return loadCurrencyConversionRates(currency, null, null);
-                    }
-                });
+    private Map<LocalDate, BigDecimal> fetchAndStoreExchangeRates(String currencyKey) {
+        String apiUrlWithParams = currencyConversionApiUrl + "?fields=currency,exchange_rate,record_date" +
+                "&filter=currency:in:(" + currencyKey + ")" +
+                "&filter=record_date:gte:2023-12-31";
+
+        RestTemplate restTemplate = new RestTemplate();
+        String jsonApiResponse = restTemplate.getForObject(apiUrlWithParams, String.class);
+        return parseJsonData(jsonApiResponse);
     }
 
-    private Map<LocalDate, BigDecimal> loadCurrencyConversionRates(String targetCurrency, LocalDate startDate, LocalDate endDate) {
+    private Map<LocalDate, BigDecimal> parseJsonData(String jsonApiResponse) {
+        Map<LocalDate, BigDecimal> exchangeRatesMap = new HashMap<>();
+
         try {
-            LocalDate sixMonthsAgo = LocalDate.now().minusDays(SIX_MONTHS_IN_DAYS);
-            startDate = (startDate != null && startDate.isAfter(sixMonthsAgo)) ? startDate : sixMonthsAgo;
+            JsonNode rootNode = objectMapper.readTree(jsonApiResponse);
+            JsonNode dataNode = rootNode.get("data");
 
-            String apiUrl = buildApiUrl(targetCurrency, startDate, endDate);
-            String jsonApiResponse = restTemplate.getForObject(apiUrl, String.class);
-            return parseJsonData(jsonApiResponse, targetCurrency);
-        } catch (Exception e) {
-            throw new RuntimeException("Error loading currency conversion rates", e);
-        }
-    }
+            if (dataNode != null && dataNode.isArray()) {
+                Iterator<JsonNode> iterator = dataNode.elements();
 
-    private String buildApiUrl(String targetCurrency, LocalDate startDate, LocalDate endDate) {
-        StringBuilder apiUrlBuilder = new StringBuilder(currencyConversionApiUrl);
+                while (iterator.hasNext()) {
+                    JsonNode entryNode = iterator.next();
+                    LocalDate recordDate = LocalDate.parse(entryNode.get("record_date").asText());
+                    BigDecimal exchangeRate = new BigDecimal(entryNode.get("exchange_rate").asText());
 
-        if (startDate != null || endDate != null) {
-            apiUrlBuilder.append("?filter=record_date");
-
-            if (startDate != null) {
-                apiUrlBuilder.append(":gte:").append(startDate);
+                    exchangeRatesMap.put(recordDate, exchangeRate);
+                }
             }
-
-            if (endDate != null) {
-                apiUrlBuilder.append(":lte:").append(endDate);
-            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error parsing JSON data", e);
         }
 
-        apiUrlBuilder.append("&fields=record_date,country,currency,country_currency_desc,exchange_rate");
-
-        return apiUrlBuilder.toString();
+        return exchangeRatesMap;
     }
 
-    private Map<LocalDate, BigDecimal> parseJsonData(String jsonApiResponse, String targetCurrency) throws IOException {
-        Map<LocalDate, BigDecimal> conversionRates = new HashMap<>();
-
-        JsonNode rootNode = objectMapper.readTree(jsonApiResponse);
-        JsonNode dataNode = rootNode.get("data");
-
-        if (dataNode != null && dataNode.isArray()) {
-            for (JsonNode entryNode : dataNode) {
-                LocalDate recordDate = LocalDate.parse(entryNode.get("record_date").asText());
-                BigDecimal exchangeRate = new BigDecimal(entryNode.get("exchange_rate").asText());
-
-                conversionRates.put(recordDate, exchangeRate);
-            }
-        }
-
-        return conversionRates;
-    }
-
-    public BigDecimal convertToCurrency(BigDecimal amount, String targetCurrency, LocalDate purchaseDate) {
+    public PurchaseWithExchangeRateDTO convertToCurrency(PurchaseWithExchangeRateDTO purchaseWithExchangeRateDTO, String targetCurrency) {
         try {
-            // Load or retrieve conversion rates for the specified target currency
-            Map<LocalDate, BigDecimal> currencyRates = conversionCache.get(targetCurrency);
-
-            // Find the nearest exchange rate based on the purchase date
-            BigDecimal exchangeRate = findNearestExchangeRate(currencyRates, purchaseDate);
-
-            // Perform the currency conversion and round to two decimal places
-            return amount.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
+            Map<LocalDate, BigDecimal> exchangeRates = currencyExchangeRatesCache.get(targetCurrency);
+            BigDecimal closestExchangeRate = findNearestExchangeRate(exchangeRates, purchaseWithExchangeRateDTO.getTransactionDate());
+            purchaseWithExchangeRateDTO.setExchangeRateUsed(closestExchangeRate);
+            purchaseWithExchangeRateDTO.setConvertedAmount(purchaseWithExchangeRateDTO.getAmount().multiply(closestExchangeRate));
         } catch (Exception e) {
-            System.out.println("Conversion of currency failed; defaulting to self");
-            return amount;
+            System.out.println("Error converting currency; defaulting to self " + e.getMessage());
         }
+
+        return purchaseWithExchangeRateDTO;
     }
 
-
-    private BigDecimal findNearestExchangeRate(Map<LocalDate, BigDecimal> conversionRates, LocalDate purchaseDate) {
-        return conversionRates.entrySet()
+    private BigDecimal findNearestExchangeRate(Map<LocalDate, BigDecimal> exchangeRates, LocalDate purchaseDate) {
+        return exchangeRates.entrySet()
                 .stream()
                 .filter(entry -> !entry.getKey().isAfter(purchaseDate))
                 .max(Map.Entry.comparingByKey())

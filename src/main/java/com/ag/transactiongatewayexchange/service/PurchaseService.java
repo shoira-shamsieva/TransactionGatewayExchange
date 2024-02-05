@@ -1,11 +1,13 @@
 package com.ag.transactiongatewayexchange.service;
 
 import com.ag.transactiongatewayexchange.dto.PurchaseDTO;
+import com.ag.transactiongatewayexchange.dto.PurchaseWithExchangeRateDTO;
 import com.ag.transactiongatewayexchange.model.Purchase;
 import com.ag.transactiongatewayexchange.repository.PurchaseRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -33,22 +35,27 @@ public class PurchaseService {
         return purchase.getUniqueIdentifier();
     }
 
-    public PurchaseDTO retrievePurchaseById(UUID uuid, String targetCurrency) {
+    public PurchaseWithExchangeRateDTO retrievePurchaseById(UUID uuid, String targetCurrency) {
         Purchase purchase = purchaseRepository.findByUniqueIdentifier(uuid);
-
-        if (purchase != null) {
+        PurchaseWithExchangeRateDTO purchaseWithExchangeRateDTO = new PurchaseWithExchangeRateDTO(
+                purchase.getDescription(),
+                purchase.getTransactionDate(),
+                purchase.getAmount(),
+                BigDecimal.ONE,
+                purchase.getAmount());
             // If a target currency is specified, perform the conversion
             if (targetCurrency != null && !targetCurrency.isEmpty()) {
-                BigDecimal convertedAmount = currencyConverterService.convertToCurrency(purchase.getAmount(),
-                        targetCurrency,
-                        purchase.getTransactionDate());
-                purchase.setAmount(convertedAmount);
-                purchase.setCurrency(targetCurrency);
+                return currencyConverterService.convertToCurrency(purchaseWithExchangeRateDTO,
+                        standardizeCurrency(targetCurrency));
             }
 
-            return new PurchaseDTO(purchase.getDescription(), purchase.getTransactionDate(), purchase.getAmount(), purchase.getCurrency());
+            return purchaseWithExchangeRateDTO;
+    }
+
+    private String standardizeCurrency(String currency) {
+        if (currency != null && !currency.isEmpty()) {
+            return StringUtils.capitalize(currency.toLowerCase());
         } else {
-            //TODO need clarification how to handle the case where the purchase with the given UUID is not found
             return null;
         }
     }

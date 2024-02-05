@@ -8,8 +8,10 @@ import java.time.LocalDate;
 
 @Data
 @AllArgsConstructor
-public class PurchaseDTO {
+public class PurchaseWithExchangeRateDTO {
     private String description;
     private LocalDate transactionDate;
     private BigDecimal amount;
+    private BigDecimal exchangeRateUsed;
+    private BigDecimal convertedAmount;
 }

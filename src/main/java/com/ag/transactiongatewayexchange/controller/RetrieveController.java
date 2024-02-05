@@ -1,6 +1,7 @@
 package com.ag.transactiongatewayexchange.controller;
 
 import com.ag.transactiongatewayexchange.dto.PurchaseDTO;
+import com.ag.transactiongatewayexchange.dto.PurchaseWithExchangeRateDTO;
 import com.ag.transactiongatewayexchange.service.PurchaseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,9 +17,9 @@ public class RetrieveController {
     private PurchaseService purchaseService;
 
     @GetMapping("/api/purchases/{uuid}")
-    public PurchaseDTO retrievePurchase(@PathVariable UUID uuid, @RequestParam(required = false) String currency) {
+    public PurchaseWithExchangeRateDTO  retrievePurchase(@PathVariable UUID uuid, @RequestParam(required = false) String currency) {
         System.out.println("UUID received " + uuid + " currency " + currency);
-        PurchaseDTO purchase = purchaseService.retrievePurchaseById(uuid, currency);
+        PurchaseWithExchangeRateDTO purchase = purchaseService.retrievePurchaseById(uuid, currency);
 
         if (purchase != null) {
             return purchase;

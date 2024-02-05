@@ -32,7 +32,7 @@ Retrieve a stored purchase transaction converted to a specified currency using t
     {
       "description": "Sample Purchase",
       "transactionDate": "2024-02-05",
-      "originalPurchaseAmount": 100.50,
+      "amount": 100.50,
       "exchangeRateUsed": 1.0,
       "convertedAmount": 100.50
     }
