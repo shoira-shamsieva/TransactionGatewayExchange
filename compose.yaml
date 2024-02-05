@@ -12,23 +12,29 @@ services:
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
-      - 'MYSQL_DATABASE=TXN_GATEWAY'
-      - 'MYSQL_USER: temp'
-      - 'MYSQL_PASSWORD: temp_password'
-      - 'MYSQL_ROOT_PASSWORD=root_password'
+      MYSQL_DATABASE: TXN_GATEWAY
+      MYSQL_USER: temp
+      MYSQL_PASSWORD: temp_password
+      MYSQL_ROOT_PASSWORD: root_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
 
   app:
     build:
       context: .
       dockerfile: Dockerfile
     depends_on:
-      - mysql_db
+      mysql_db:
+        condition: service_healthy
     ports:
       - "8080:8080"
     expose:
       - '8080'
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql_db:3306/TXN_GATEWAY?autoReconnect=true&useSSL=false
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql_db:3306/TXN_GATEWAY?autoReconnect=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: temp
       SPRING_DATASOURCE_PASSWORD: temp_password
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MySQLDialect

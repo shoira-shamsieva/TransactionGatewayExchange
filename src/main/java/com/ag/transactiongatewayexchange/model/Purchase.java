@@ -17,9 +17,10 @@ import java.util.UUID;
 public class Purchase {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    private UUID uniqueIdentifier;
     private String description;
     private LocalDate transactionDate;
     private BigDecimal amount;
+    private String currency;
 
 }

@@ -26,11 +26,10 @@ Store a purchase transaction with a description, transaction date, and purchase 
 
 Retrieve a stored purchase transaction converted to a specified currency using the Treasury Reporting Rates of Exchange API.
 
-- **Endpoint:** `GET /api/purchases/{uniqueIdentifier}/convert?currency=USD`
+- **Endpoint:** `GET /api/purchases/{uniqueIdentifier}?currency=USD`
 - **Response Example:**
     ```json
     {
-      "identifier": "550e8400-e29b-41d4-a716-446655440000",
       "description": "Sample Purchase",
       "transactionDate": "2024-02-05",
       "originalPurchaseAmount": 100.50,
@@ -65,7 +64,7 @@ The application utilizes the Treasury Reporting Rates of Exchange API for curren
 
 2. **Retrieve a Purchase Transaction in USD:**
    ```bash
-   curl http://localhost:8080/api/purchases/{uniqueIdentifier}/convert?currency=USD
+   curl http://localhost:8080/api/purchases/{uniqueIdentifier}?currency=USD
    ```
 
 Replace `{uniqueIdentifier}` with the actual identifier returned after storing a purchase.
